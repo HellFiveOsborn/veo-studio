@@ -237,7 +237,12 @@ export const generateVideo = async (
   }
 
   if (operation?.response) {
-    const videos = operation.response.generatedVideos;
+    // O SDK normaliza a resposta para `generatedVideos`.
+    // A resposta bruta da API da sondagem manual a tem em `generateVideoResponse.generatedSamples`.
+    // Precisamos lidar com ambas as estruturas.
+    const videos =
+      (operation.response as any).generatedVideos ??
+      (operation.response as any).generateVideoResponse?.generatedSamples;
 
     if (!videos || videos.length === 0) {
       throw new Error('Nenhum vídeo foi gerado.');
