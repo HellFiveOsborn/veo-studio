@@ -22,36 +22,45 @@ export const generateVideo = async (
   }
   console.log('Starting video generation with params:', params);
 
-  let sdkEndpoint: string | undefined;
+  // Configure o cliente de IA, usando um endpoint personalizado se fornecido.
+  const clientConfig: {
+    apiKey: string;
+    clientOptions?: {apiEndpoint?: string};
+  } = {apiKey};
+
   let downloadBaseUrl: string | undefined;
 
   if (apiEndpoint && apiEndpoint.trim() !== '') {
     try {
+      // Analise a entrada do usuário para construir URLs corretamente.
       const endpointUrl = new URL(
-        apiEndpoint.startsWith('http') ? apiEndpoint : `https://${apiEndpoint}`,
+        apiEndpoint.startsWith('http')
+          ? apiEndpoint
+          : `https://${apiEndpoint}`,
       );
-      // Para o SDK: host + caminho (ex: "meu-proxy.com/gemini")
-      sdkEndpoint = `${endpointUrl.host}${endpointUrl.pathname.replace(
-        /\/$/,
-        '',
-      )}`;
-      // Para download: protocolo + host + caminho (ex: "https://meu-proxy.com/gemini")
-      downloadBaseUrl = `${endpointUrl.protocol}//${sdkEndpoint}`;
+
+      // A opção `apiEndpoint` do SDK espera o host e o caminho, sem o protocolo.
+      // ex., "meu-proxy.com" ou "meu-proxy.com/gemini/proxy"
+      const endpointForSdk =
+        endpointUrl.host + endpointUrl.pathname.replace(/\/$/, '');
+
+      clientConfig.clientOptions = {
+        apiEndpoint: endpointForSdk,
+      };
+      console.log(`Endpoint de API personalizado configurado para o SDK: ${endpointForSdk}`);
+
+      // Para construir a URL de download final, precisamos do URL base completo.
+      downloadBaseUrl = endpointUrl.toString().replace(/\/$/, '');
     } catch (e) {
-      console.error(
-        'Formato de Endpoint de API inválido, tentando usar como está:',
-        apiEndpoint,
+      throw new Error(
+        `Endpoint de API inválido: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
       );
-      // Fallback para hostnames simples
-      sdkEndpoint = apiEndpoint;
-      downloadBaseUrl = `https://${apiEndpoint}`;
     }
   }
 
-  const ai = new GoogleGenAI({
-    apiKey,
-    ...(sdkEndpoint && {clientOptions: {apiEndpoint: sdkEndpoint}}),
-  });
+  const ai = new GoogleGenAI(clientConfig);
 
   const config: {
     numberOfVideos: number;
@@ -166,7 +175,9 @@ export const generateVideo = async (
       generateVideoPayload.video = params.inputVideoObject;
       console.log(`Gerando extensão a partir do objeto de vídeo de entrada.`);
     } else {
-      throw new Error('Um objeto de vídeo de entrada é necessário para estender um vídeo.');
+      throw new Error(
+        'Um objeto de vídeo de entrada é necessário para estender um vídeo.',
+      );
     }
   }
 
@@ -198,9 +209,13 @@ export const generateVideo = async (
 
     if (downloadBaseUrl) {
       try {
+        // A URI da API é uma URL completa. Precisamos apenas do seu caminho e parâmetros de consulta.
         const originalUrlObject = new URL(originalUri);
-        // Anexe o caminho do URI original do Google
-        downloadUrl = `${downloadBaseUrl}${originalUrlObject.pathname}`;
+        const pathWithQuery =
+          originalUrlObject.pathname + originalUrlObject.search;
+
+        // Anexe o caminho e a consulta ao nosso URL base personalizado.
+        downloadUrl = `${downloadBaseUrl}${pathWithQuery}`;
         console.log(
           `Usando endpoint personalizado. URI Original: ${originalUri}, URL de Download Construída: ${downloadUrl}`,
         );
@@ -215,8 +230,27 @@ export const generateVideo = async (
       downloadUrl = originalUri;
     }
 
-    console.log('Buscando vídeo de:', downloadUrl);
-    const res = await fetch(`${downloadUrl}&key=${apiKey}`);
+    const finalDownloadUrl = new URL(downloadUrl);
+    const fetchOptions: RequestInit = {};
+
+    // Para endpoints personalizados, a autenticação é necessária para todas as requisições,
+    // incluindo o download final do vídeo. Usaremos um token Bearer.
+    if (apiEndpoint) {
+      fetchOptions.headers = {
+        Authorization: `Bearer ${apiKey}`,
+      };
+      // A chave de API é enviada no cabeçalho, então a removemos dos parâmetros de consulta.
+      finalDownloadUrl.searchParams.delete('key');
+    } else {
+      // Para o endpoint padrão do Google, a chave de API é passada como um parâmetro de consulta.
+      // A URI original já deve contê-la, mas garantimos que esteja lá.
+      if (!finalDownloadUrl.searchParams.has('key')) {
+        finalDownloadUrl.searchParams.set('key', apiKey);
+      }
+    }
+
+    console.log('Buscando vídeo de:', finalDownloadUrl.toString());
+    const res = await fetch(finalDownloadUrl.toString(), fetchOptions);
 
     if (!res.ok) {
       const errorBody = await res.text();
@@ -232,6 +266,11 @@ export const generateVideo = async (
     return {objectUrl, blob: videoBlob, uri: downloadUrl, video: videoObject};
   } else {
     console.error('A operação falhou:', operation);
+    // Tente extrair informações de erro da operação, se disponíveis.
+    const opError = (operation as any).error;
+    if (opError) {
+      throw new Error(`A operação falhou: ${opError.message || JSON.stringify(opError)}`);
+    }
     throw new Error('Nenhum vídeo gerado.');
   }
 };
