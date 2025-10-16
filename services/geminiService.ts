@@ -68,6 +68,10 @@ export const generateVideo = async (
 
   const ai = new GoogleGenAI(clientConfig);
 
+  const generateVideoPayload: any = {
+    model: params.model,
+  };
+
   const config: {
     numberOfVideos: number;
     resolution?: string;
@@ -76,13 +80,14 @@ export const generateVideo = async (
     referenceImages?: VideoGenerationReferenceImage[];
     durationSeconds?: number;
     personGeneration?: string;
-    negativePrompt?: string;
-    generateAudio?: boolean;
-    enhancePrompt?: boolean;
-    compressionQuality?: string;
   } = {
     numberOfVideos: 1,
   };
+
+  // Adicione o prompt apenas se não estiver vazio, pois um prompt vazio pode interferir em outros parâmetros.
+  if (params.prompt) {
+    generateVideoPayload.prompt = params.prompt;
+  }
 
   // Aplique parâmetros comuns primeiro
   if (params.durationSeconds) {
@@ -102,30 +107,24 @@ export const generateVideo = async (
       config.aspectRatio = params.aspectRatio;
     }
 
+    // Os seguintes parâmetros são de nível superior para modelos Veo 3.x
     if (params.negativePrompt && params.negativePrompt.trim() !== '') {
-      config.negativePrompt = params.negativePrompt;
+      generateVideoPayload.negativePrompt = params.negativePrompt;
     }
     // Verifique se é indefinido porque é um booleano que pode ser falso
     if (params.generateAudio !== undefined) {
-      config.generateAudio = params.generateAudio;
+      generateVideoPayload.generateAudio = params.generateAudio;
     }
     if (params.enhancePrompt !== undefined) {
-      config.enhancePrompt = params.enhancePrompt;
+      generateVideoPayload.enhancePrompt = params.enhancePrompt;
     }
     if (params.compressionQuality) {
-      config.compressionQuality = params.compressionQuality;
+      generateVideoPayload.compressionQuality = params.compressionQuality;
     }
   }
 
-  const generateVideoPayload: any = {
-    model: params.model,
-    config: config,
-  };
-
-  // Adicione o prompt apenas se não estiver vazio, pois um prompt vazio pode interferir em outros parâmetros.
-  if (params.prompt) {
-    generateVideoPayload.prompt = params.prompt;
-  }
+  // Anexe o objeto de configuração ao payload
+  generateVideoPayload.config = config;
 
   if (
     params.mode === GenerationMode.TEXT_TO_VIDEO &&
