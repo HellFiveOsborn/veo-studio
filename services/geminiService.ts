@@ -25,7 +25,10 @@ export const generateVideo = async (
   // Configure o cliente de IA, usando um endpoint personalizado se fornecido.
   const clientConfig: {
     apiKey: string;
-    clientOptions?: {apiEndpoint?: string};
+    httpOptions?: {
+      baseUrl?: string;
+      headers?: Record<string, string>;
+    };
   } = {apiKey};
 
   let downloadBaseUrl: string | undefined;
@@ -39,18 +42,21 @@ export const generateVideo = async (
           : `https://${apiEndpoint}`,
       );
 
-      // A opção `apiEndpoint` do SDK espera o host e o caminho, sem o protocolo.
-      // ex., "meu-proxy.com" ou "meu-proxy.com/gemini/proxy"
-      const endpointForSdk =
-        endpointUrl.host + endpointUrl.pathname.replace(/\/$/, '');
+      // A opção `baseUrl` do SDK espera a URL base completa, incluindo o protocolo.
+      const baseUrlForSdk = endpointUrl.toString().replace(/\/$/, '');
 
-      clientConfig.clientOptions = {
-        apiEndpoint: endpointForSdk,
+      // Isso será usado para reconstruir a URL de download final do vídeo.
+      downloadBaseUrl = baseUrlForSdk;
+
+      // Configure o URL base para as requisições e o cabeçalho de autorização.
+      clientConfig.httpOptions = {
+        baseUrl: baseUrlForSdk,
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
       };
-      console.log(`Endpoint de API personalizado configurado para o SDK: ${endpointForSdk}`);
 
-      // Para construir a URL de download final, precisamos do URL base completo.
-      downloadBaseUrl = endpointUrl.toString().replace(/\/$/, '');
+      console.log(`Endpoint de API personalizado configurado para o SDK: ${baseUrlForSdk}`);
     } catch (e) {
       throw new Error(
         `Endpoint de API inválido: ${
@@ -185,10 +191,49 @@ export const generateVideo = async (
   let operation = await ai.models.generateVideos(generateVideoPayload);
   console.log('Operação de geração de vídeo iniciada:', operation);
 
-  while (!operation.done) {
-    await new Promise((resolve) => setTimeout(resolve, 10000));
-    console.log('...Gerando...');
-    operation = await ai.operations.getVideosOperation({operation: operation});
+  // A sondagem do SDK (GET) pode ser armazenada em cache por proxies personalizados.
+  // Se um endpoint personalizado for usado, faremos a sondagem manualmente com um parâmetro
+  // de cache-busting para garantir que recebemos o status mais recente.
+  if (apiEndpoint && apiEndpoint.trim() !== '' && downloadBaseUrl) {
+    const operationName = operation.name;
+    const pollUrl = new URL(`${downloadBaseUrl}/v1beta/${operationName}`);
+    const pollHeaders = {
+      Authorization: `Bearer ${apiKey}`,
+    };
+
+    while (!operation.done) {
+      await new Promise((resolve) => setTimeout(resolve, 10000));
+      console.log('...Gerando (sondagem manual para evitar cache)...');
+
+      // Parâmetro de cache-busting
+      pollUrl.searchParams.set('_', Date.now().toString());
+
+      try {
+        const pollResponse = await fetch(pollUrl.toString(), {
+          headers: pollHeaders,
+        });
+
+        if (!pollResponse.ok) {
+          const errorText = await pollResponse.text();
+          throw new Error(
+            `Falha na sondagem da operação: ${pollResponse.status} ${pollResponse.statusText}. ${errorText}`,
+          );
+        }
+        // Atualize o objeto de operação com o novo status
+        operation = await pollResponse.json();
+      } catch (error) {
+        console.error('Erro durante a sondagem manual:', error);
+        // Pare a sondagem em caso de erro de rede, etc., para evitar um loop infinito
+        throw error;
+      }
+    }
+  } else {
+    // Lógica de sondagem original para o endpoint padrão do Google
+    while (!operation.done) {
+      await new Promise((resolve) => setTimeout(resolve, 10000));
+      console.log('...Gerando...');
+      operation = await ai.operations.getVideosOperation({operation: operation});
+    }
   }
 
   if (operation?.response) {
