@@ -5,20 +5,24 @@
 import React from 'react';
 import {
   AlertTriangle,
+  Archive,
   ArrowDown,
   ArrowRight,
   Baseline,
+  BrainCircuit,
   ChevronDown,
   Clock,
   Film,
   Image,
   KeyRound,
   Layers,
+  Mic,
   Plus,
   RefreshCw,
   SlidersHorizontal,
   Sparkles,
   Tv,
+  UserMinus,
   X,
 } from 'lucide-react';
 
@@ -93,4 +97,17 @@ export const AlertTriangleIcon: React.FC<React.SVGProps<SVGSVGElement>> = (
 
 export const ClockIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   <Clock {...defaultProps} {...props} />
+);
+
+export const MicIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <Mic {...defaultProps} {...props} />
+);
+export const BrainCircuitIcon: React.FC<React.SVGProps<SVGSVGElement>> = (
+  props,
+) => <BrainCircuit {...defaultProps} {...props} />;
+export const UserMinusIcon: React.FC<React.SVGProps<SVGSVGElement>> = (
+  props,
+) => <UserMinus {...defaultProps} {...props} />;
+export const ArchiveIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <Archive {...defaultProps} {...props} />
 );

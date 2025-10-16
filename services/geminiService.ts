@@ -76,24 +76,44 @@ export const generateVideo = async (
     referenceImages?: VideoGenerationReferenceImage[];
     durationSeconds?: number;
     personGeneration?: string;
+    negativePrompt?: string;
+    generateAudio?: boolean;
+    enhancePrompt?: boolean;
+    compressionQuality?: string;
   } = {
     numberOfVideos: 1,
   };
 
+  // Aplique parâmetros comuns primeiro
+  if (params.durationSeconds) {
+    config.durationSeconds = params.durationSeconds;
+  }
+  if (params.allowPeople) {
+    config.personGeneration = 'allow_adult';
+  }
+
   if (params.model === VeoModel.VEO_2_0) {
     config.aspectRatio = params.aspectRatio;
-    if (params.durationSeconds) {
-      config.durationSeconds = params.durationSeconds;
-    }
-    if (params.allowPeople) {
-      config.personGeneration = 'allow_adult';
-    }
   } else {
-    // Outros modelos (VEO 3.x)
+    // Modelos VEO 3.x
     config.resolution = params.resolution;
     // A proporção não é usada para estender vídeos.
     if (params.mode !== GenerationMode.EXTEND_VIDEO) {
       config.aspectRatio = params.aspectRatio;
+    }
+
+    if (params.negativePrompt && params.negativePrompt.trim() !== '') {
+      config.negativePrompt = params.negativePrompt;
+    }
+    // Verifique se é indefinido porque é um booleano que pode ser falso
+    if (params.generateAudio !== undefined) {
+      config.generateAudio = params.generateAudio;
+    }
+    if (params.enhancePrompt !== undefined) {
+      config.enhancePrompt = params.enhancePrompt;
+    }
+    if (params.compressionQuality) {
+      config.compressionQuality = params.compressionQuality;
     }
   }
 

@@ -6,6 +6,7 @@ import {Video} from '@google/genai';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
   AspectRatio,
+  CompressionQuality,
   GenerateVideoParams,
   GenerationMode,
   ImageFile,
@@ -15,12 +16,15 @@ import {
 } from '../types';
 import {
   AlertTriangleIcon,
+  ArchiveIcon,
   ArrowRightIcon,
+  BrainCircuitIcon,
   ChevronDownIcon,
   ClockIcon,
   FilmIcon,
   FramesModeIcon,
   KeyIcon,
+  MicIcon,
   PlusIcon,
   RectangleStackIcon,
   ReferencesModeIcon,
@@ -28,6 +32,7 @@ import {
   SparklesIcon,
   TextModeIcon,
   TvIcon,
+  UserMinusIcon,
   XMarkIcon,
 } from './icons';
 
@@ -238,7 +243,7 @@ const PromptForm: React.FC<PromptFormProps> = ({
 }) => {
   const [prompt, setPrompt] = useState(initialValues?.prompt ?? '');
   const [model, setModel] = useState<VeoModel>(
-    initialValues?.model ?? VeoModel.VEO_2_0,
+    initialValues?.model ?? VeoModel.VEO_3_1_FAST,
   );
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>(
     initialValues?.aspectRatio ?? AspectRatio.LANDSCAPE,
@@ -277,17 +282,33 @@ const PromptForm: React.FC<PromptFormProps> = ({
   const [allowPeople, setAllowPeople] = useState(
     initialValues?.allowPeople ?? false,
   );
+  // New state for Veo 3.x
+  const [negativePrompt, setNegativePrompt] = useState(
+    initialValues?.negativePrompt ?? '',
+  );
+  const [generateAudio, setGenerateAudio] = useState(
+    initialValues?.generateAudio ?? false,
+  );
+  const [enhancePrompt, setEnhancePrompt] = useState(
+    initialValues?.enhancePrompt ?? true,
+  );
+  const [compressionQuality, setCompressionQuality] =
+    useState<CompressionQuality>(
+      initialValues?.compressionQuality ?? CompressionQuality.OPTIMIZED,
+    );
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isModeSelectorOpen, setIsModeSelectorOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modeSelectorRef = useRef<HTMLDivElement>(null);
 
+  const isVeo2_0 = model === VeoModel.VEO_2_0;
+
   // Sync state with initialValues prop when it changes (e.g., for "Extend" or "Try Again")
   useEffect(() => {
     if (initialValues) {
       setPrompt(initialValues.prompt ?? '');
-      setModel(initialValues.model ?? VeoModel.VEO_2_0);
+      setModel(initialValues.model ?? VeoModel.VEO_3_1_FAST);
       setAspectRatio(initialValues.aspectRatio ?? AspectRatio.LANDSCAPE);
       setResolution(initialValues.resolution ?? Resolution.P720);
       setGenerationMode(initialValues.mode ?? GenerationMode.TEXT_TO_VIDEO);
@@ -301,8 +322,23 @@ const PromptForm: React.FC<PromptFormProps> = ({
       setIsLooping(initialValues.isLooping ?? false);
       setDurationSeconds(initialValues.durationSeconds ?? 8);
       setAllowPeople(initialValues.allowPeople ?? false);
+      setNegativePrompt(initialValues.negativePrompt ?? '');
+      setGenerateAudio(initialValues.generateAudio ?? false);
+      setEnhancePrompt(initialValues.enhancePrompt ?? true);
+      setCompressionQuality(
+        initialValues.compressionQuality ?? CompressionQuality.OPTIMIZED,
+      );
     }
   }, [initialValues]);
+
+  // Adjust duration when model family changes to avoid invalid states
+  useEffect(() => {
+    if (isVeo2_0) {
+      if (durationSeconds < 5) setDurationSeconds(5);
+    } else {
+      if (![4, 6, 8].includes(durationSeconds)) setDurationSeconds(8);
+    }
+  }, [isVeo2_0, durationSeconds]);
 
   useEffect(() => {
     if (generationMode === GenerationMode.REFERENCES_TO_VIDEO) {
@@ -354,6 +390,10 @@ const PromptForm: React.FC<PromptFormProps> = ({
         isLooping,
         durationSeconds,
         allowPeople,
+        negativePrompt,
+        generateAudio,
+        enhancePrompt,
+        compressionQuality,
       });
     },
     [
@@ -373,6 +413,10 @@ const PromptForm: React.FC<PromptFormProps> = ({
       isLooping,
       durationSeconds,
       allowPeople,
+      negativePrompt,
+      generateAudio,
+      enhancePrompt,
+      compressionQuality,
     ],
   );
 
@@ -408,7 +452,6 @@ const PromptForm: React.FC<PromptFormProps> = ({
 
   const isRefMode = generationMode === GenerationMode.REFERENCES_TO_VIDEO;
   const isExtendMode = generationMode === GenerationMode.EXTEND_VIDEO;
-  const isVeo2_0 = model === VeoModel.VEO_2_0;
 
   const renderMediaUploads = () => {
     if (generationMode === GenerationMode.TEXT_TO_VIDEO && isVeo2_0) {
@@ -490,12 +533,6 @@ const PromptForm: React.FC<PromptFormProps> = ({
               onSelect={(img) => setReferenceImages((imgs) => [...imgs, img])}
             />
           )}
-          {/* <ImageUpload
-            label="Style Image"
-            image={styleImage}
-            onSelect={setStyleImage}
-            onRemove={() => setStyleImage(null)}
-          /> */}
         </div>
       );
     }
@@ -612,48 +649,140 @@ const PromptForm: React.FC<PromptFormProps> = ({
               )}
             </div>
           </div>
+
           {isVeo2_0 && (
             <div className="border-t border-gray-600 mt-4 pt-4">
               <h3 className="text-sm font-medium text-gray-300 mb-3">
                 Configurações do Veo 2.0
               </h3>
-              <div className="space-y-4">
-                <div>
-                  <label
-                    htmlFor="duration-slider"
-                    className="flex items-center text-xs mb-1.5 font-medium text-gray-400">
-                    <ClockIcon className="w-4 h-4 mr-2" />
-                    Duração do Vídeo: {durationSeconds}s
-                  </label>
+              <div>
+                <label
+                  htmlFor="duration-slider"
+                  className="flex items-center text-xs mb-1.5 font-medium text-gray-400">
+                  <ClockIcon className="w-4 h-4 mr-2" />
+                  Duração do Vídeo: {durationSeconds}s
+                </label>
+                <input
+                  type="range"
+                  id="duration-slider"
+                  min="5"
+                  max="8"
+                  step="1"
+                  value={durationSeconds}
+                  onChange={(e) => setDurationSeconds(Number(e.target.value))}
+                  className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer"
+                />
+              </div>
+            </div>
+          )}
+          {!isVeo2_0 && (
+            <div className="border-t border-gray-600 mt-4 pt-4">
+              <h3 className="text-sm font-medium text-gray-300 mb-3">
+                Configurações do Veo 3
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <CustomSelect
+                  label="Duração do Vídeo"
+                  value={durationSeconds.toString()}
+                  onChange={(e) => setDurationSeconds(Number(e.target.value))}
+                  icon={<ClockIcon className="w-5 h-5 text-gray-400" />}>
+                  <option value="4">4 segundos</option>
+                  <option value="6">6 segundos</option>
+                  <option value="8">8 segundos</option>
+                </CustomSelect>
+
+                <CustomSelect
+                  label="Qualidade de Compressão"
+                  value={compressionQuality}
+                  onChange={(e) =>
+                    setCompressionQuality(e.target.value as CompressionQuality)
+                  }
+                  icon={<ArchiveIcon className="w-5 h-5 text-gray-400" />}>
+                  <option value={CompressionQuality.OPTIMIZED}>
+                    Otimizada
+                  </option>
+                  <option value={CompressionQuality.LOSSLESS}>
+                    Sem Perdas (Lossless)
+                  </option>
+                </CustomSelect>
+              </div>
+
+              <div className="mt-4">
+                <label
+                  htmlFor="negative-prompt-input"
+                  className="text-xs block mb-1.5 font-medium text-gray-400">
+                  Comando Negativo (Opcional)
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                    <UserMinusIcon className="w-5 h-5 text-gray-400" />
+                  </div>
                   <input
-                    type="range"
-                    id="duration-slider"
-                    min="5"
-                    max="8"
-                    step="1"
-                    value={durationSeconds}
-                    onChange={(e) => setDurationSeconds(Number(e.target.value))}
-                    className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer"
+                    type="text"
+                    id="negative-prompt-input"
+                    value={negativePrompt}
+                    onChange={(e) => setNegativePrompt(e.target.value)}
+                    placeholder="Ex: preto e branco, desfoque..."
+                    className="w-full bg-[#1f1f1f] border border-gray-600 rounded-lg pl-10 pr-4 py-2.5 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                   />
                 </div>
+              </div>
 
-                <div className="flex items-center pt-2">
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center">
                   <input
-                    id="person-generation-checkbox"
+                    id="audio-generation-checkbox"
                     type="checkbox"
-                    checked={allowPeople}
-                    onChange={(e) => setAllowPeople(e.target.checked)}
+                    checked={generateAudio}
+                    onChange={(e) => setGenerateAudio(e.target.checked)}
                     className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500"
                   />
                   <label
-                    htmlFor="person-generation-checkbox"
-                    className="ml-2 text-sm font-medium text-gray-300">
-                    Permitir geração de pessoas
+                    htmlFor="audio-generation-checkbox"
+                    className="ml-2 text-sm font-medium text-gray-300 flex items-center gap-2">
+                    <MicIcon className="w-4 h-4" />
+                    Gerar áudio
+                  </label>
+                </div>
+                <div className="flex items-center">
+                  <input
+                    id="enhance-prompt-checkbox"
+                    type="checkbox"
+                    checked={enhancePrompt}
+                    onChange={(e) => setEnhancePrompt(e.target.checked)}
+                    className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500"
+                  />
+                  <label
+                    htmlFor="enhance-prompt-checkbox"
+                    className="ml-2 text-sm font-medium text-gray-300 flex items-center gap-2">
+                    <BrainCircuitIcon className="w-4 h-4" />
+                    Melhorar comando automaticamente
                   </label>
                 </div>
               </div>
             </div>
           )}
+
+          <div className="border-t border-gray-600 mt-4 pt-4">
+            <h3 className="text-sm font-medium text-gray-300 mb-3">
+              Configurações Gerais
+            </h3>
+            <div className="flex items-center">
+              <input
+                id="person-generation-checkbox"
+                type="checkbox"
+                checked={allowPeople}
+                onChange={(e) => setAllowPeople(e.target.checked)}
+                className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500"
+              />
+              <label
+                htmlFor="person-generation-checkbox"
+                className="ml-2 text-sm font-medium text-gray-300">
+                Permitir geração de pessoas
+              </label>
+            </div>
+          </div>
+
           <div className="border-t border-gray-600 mt-4 pt-4 space-y-4">
             <div>
               <label

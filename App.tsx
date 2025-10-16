@@ -29,14 +29,21 @@ const App: React.FC = () => {
   const [apiKey, setApiKey] = useState(
     localStorage.getItem('gemini-api-key') || '',
   );
-  const [apiEndpoint, setApiEndpoint] = useState('');
+  const [apiEndpoint, setApiEndpoint] = useState(
+    localStorage.getItem('gemini-api-endpoint') || '',
+  );
 
-  // Save API key to local storage whenever it changes
+  // Salve a chave de API no localStorage sempre que ela mudar
   useEffect(() => {
     localStorage.setItem('gemini-api-key', apiKey);
   }, [apiKey]);
 
-  // A single state to hold the initial values for the prompt form
+  // Salve o endpoint da API no localStorage sempre que ele mudar
+  useEffect(() => {
+    localStorage.setItem('gemini-api-endpoint', apiEndpoint);
+  }, [apiEndpoint]);
+
+  // Um único estado para armazenar os valores iniciais para o formulário de comando
   const [initialFormValues, setInitialFormValues] =
     useState<GenerateVideoParams | null>(null);
 
@@ -58,7 +65,7 @@ const App: React.FC = () => {
       setAppState(AppState.LOADING);
       setErrorMessage(null);
       setLastConfig(params);
-      // Reset initial form values for the next fresh start
+      // Redefina os valores iniciais do formulário para o próximo novo começo
       setInitialFormValues(null);
 
       try {
@@ -112,7 +119,7 @@ const App: React.FC = () => {
     setLastConfig(null);
     setLastVideoObject(null);
     setLastVideoBlob(null);
-    setInitialFormValues(null); // Clear the form state
+    setInitialFormValues(null); // Limpe o estado do formulário
   }, []);
 
   const handleTryAgainFromError = useCallback(() => {
@@ -121,7 +128,7 @@ const App: React.FC = () => {
       setAppState(AppState.IDLE);
       setErrorMessage(null);
     } else {
-      // Fallback to a fresh start if there's no last config
+      // Retorne para um novo começo se não houver última configuração
       handleNewVideo();
     }
   }, [lastConfig, handleNewVideo]);
@@ -135,13 +142,13 @@ const App: React.FC = () => {
         const videoFile: VideoFile = {file, base64: ''};
 
         setInitialFormValues({
-          ...lastConfig, // Carry over model, aspect ratio
+          ...lastConfig, // Mantenha o modelo, proporção
           mode: GenerationMode.EXTEND_VIDEO,
-          prompt: '', // Start with a blank prompt
-          inputVideo: videoFile, // for preview in the form
-          inputVideoObject: lastVideoObject, // for the API call
-          resolution: Resolution.P720, // Extend requires 720p
-          // Reset other media types
+          prompt: '', // Comece com um comando em branco
+          inputVideo: videoFile, // para pré-visualização no formulário
+          inputVideoObject: lastVideoObject, // para a chamada da API
+          resolution: Resolution.P720, // Estender requer 720p
+          // Redefina outros tipos de mídia
           startFrame: null,
           endFrame: null,
           referenceImages: [],

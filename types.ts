@@ -36,6 +36,11 @@ export enum GenerationMode {
   EXTEND_VIDEO = 'Estender Vídeo',
 }
 
+export enum CompressionQuality {
+  OPTIMIZED = 'optimized',
+  LOSSLESS = 'lossless',
+}
+
 export interface ImageFile {
   file: File;
   base64: string;
@@ -48,6 +53,7 @@ export interface VideoFile {
 
 export interface GenerateVideoParams {
   prompt: string;
+  negativePrompt?: string;
   model: VeoModel;
   aspectRatio: AspectRatio;
   resolution: Resolution;
@@ -62,4 +68,7 @@ export interface GenerateVideoParams {
   isLooping: boolean;
   durationSeconds?: number;
   allowPeople?: boolean;
+  generateAudio?: boolean;
+  enhancePrompt?: boolean;
+  compressionQuality?: CompressionQuality;
 }
