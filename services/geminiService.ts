@@ -22,9 +22,35 @@ export const generateVideo = async (
   }
   console.log('Starting video generation with params:', params);
 
+  let sdkEndpoint: string | undefined;
+  let downloadBaseUrl: string | undefined;
+
+  if (apiEndpoint && apiEndpoint.trim() !== '') {
+    try {
+      const endpointUrl = new URL(
+        apiEndpoint.startsWith('http') ? apiEndpoint : `https://${apiEndpoint}`,
+      );
+      // Para o SDK: host + caminho (ex: "meu-proxy.com/gemini")
+      sdkEndpoint = `${endpointUrl.host}${endpointUrl.pathname.replace(
+        /\/$/,
+        '',
+      )}`;
+      // Para download: protocolo + host + caminho (ex: "https://meu-proxy.com/gemini")
+      downloadBaseUrl = `${endpointUrl.protocol}//${sdkEndpoint}`;
+    } catch (e) {
+      console.error(
+        'Formato de Endpoint de API inválido, tentando usar como está:',
+        apiEndpoint,
+      );
+      // Fallback para hostnames simples
+      sdkEndpoint = apiEndpoint;
+      downloadBaseUrl = `https://${apiEndpoint}`;
+    }
+  }
+
   const ai = new GoogleGenAI({
     apiKey,
-    ...(apiEndpoint && {clientOptions: {apiEndpoint}}),
+    ...(sdkEndpoint && {clientOptions: {apiEndpoint: sdkEndpoint}}),
   });
 
   const config: {
@@ -48,9 +74,9 @@ export const generateVideo = async (
       config.personGeneration = 'allow_adult';
     }
   } else {
-    // Other models (VEO 3.x)
+    // Outros modelos (VEO 3.x)
     config.resolution = params.resolution;
-    // Aspect ratio is not used for extending videos.
+    // A proporção não é usada para estender vídeos.
     if (params.mode !== GenerationMode.EXTEND_VIDEO) {
       config.aspectRatio = params.aspectRatio;
     }
@@ -61,7 +87,7 @@ export const generateVideo = async (
     config: config,
   };
 
-  // Only add the prompt if it's not empty, as an empty prompt might interfere with other parameters.
+  // Adicione o prompt apenas se não estiver vazio, pois um prompt vazio pode interferir em outros parâmetros.
   if (params.prompt) {
     generateVideoPayload.prompt = params.prompt;
   }
@@ -75,7 +101,7 @@ export const generateVideo = async (
       imageBytes: params.inputImage.base64,
       mimeType: params.inputImage.file.type,
     };
-    console.log(`Generating with input image: ${params.inputImage.file.name}`);
+    console.log(`Gerando com imagem de entrada: ${params.inputImage.file.name}`);
   } else if (params.mode === GenerationMode.FRAMES_TO_VIDEO) {
     if (params.startFrame) {
       generateVideoPayload.image = {
@@ -83,7 +109,7 @@ export const generateVideo = async (
         mimeType: params.startFrame.file.type,
       };
       console.log(
-        `Generating with start frame: ${params.startFrame.file.name}`,
+        `Gerando com frame inicial: ${params.startFrame.file.name}`,
       );
     }
 
@@ -97,10 +123,10 @@ export const generateVideo = async (
       };
       if (params.isLooping) {
         console.log(
-          `Generating a looping video using start frame as end frame: ${finalEndFrame.file.name}`,
+          `Gerando um vídeo em loop usando o frame inicial como frame final: ${finalEndFrame.file.name}`,
         );
       } else {
-        console.log(`Generating with end frame: ${finalEndFrame.file.name}`);
+        console.log(`Gerando com frame final: ${finalEndFrame.file.name}`);
       }
     }
   } else if (params.mode === GenerationMode.REFERENCES_TO_VIDEO) {
@@ -108,7 +134,7 @@ export const generateVideo = async (
 
     if (params.referenceImages) {
       for (const img of params.referenceImages) {
-        console.log(`Adding reference image: ${img.file.name}`);
+        console.log(`Adicionando imagem de referência: ${img.file.name}`);
         referenceImagesPayload.push({
           image: {
             imageBytes: img.base64,
@@ -121,7 +147,7 @@ export const generateVideo = async (
 
     if (params.styleImage) {
       console.log(
-        `Adding style image as a reference: ${params.styleImage.file.name}`,
+        `Adicionando imagem de estilo como referência: ${params.styleImage.file.name}`,
       );
       referenceImagesPayload.push({
         image: {
@@ -138,19 +164,19 @@ export const generateVideo = async (
   } else if (params.mode === GenerationMode.EXTEND_VIDEO) {
     if (params.inputVideoObject) {
       generateVideoPayload.video = params.inputVideoObject;
-      console.log(`Generating extension from input video object.`);
+      console.log(`Gerando extensão a partir do objeto de vídeo de entrada.`);
     } else {
-      throw new Error('An input video object is required to extend a video.');
+      throw new Error('Um objeto de vídeo de entrada é necessário para estender um vídeo.');
     }
   }
 
-  console.log('Submitting video generation request...', generateVideoPayload);
+  console.log('Enviando solicitação de geração de vídeo...', generateVideoPayload);
   let operation = await ai.models.generateVideos(generateVideoPayload);
-  console.log('Video generation operation started:', operation);
+  console.log('Operação de geração de vídeo iniciada:', operation);
 
   while (!operation.done) {
     await new Promise((resolve) => setTimeout(resolve, 10000));
-    console.log('...Generating...');
+    console.log('...Gerando...');
     operation = await ai.operations.getVideosOperation({operation: operation});
   }
 
@@ -158,31 +184,29 @@ export const generateVideo = async (
     const videos = operation.response.generatedVideos;
 
     if (!videos || videos.length === 0) {
-      throw new Error('No videos were generated.');
+      throw new Error('Nenhum vídeo foi gerado.');
     }
 
     const firstVideo = videos[0];
     if (!firstVideo?.video?.uri) {
-      throw new Error('Generated video is missing a URI.');
+      throw new Error('O vídeo gerado não possui um URI.');
     }
     const videoObject = firstVideo.video;
 
     const originalUri = decodeURIComponent(videoObject.uri);
     let downloadUrl: string;
 
-    if (apiEndpoint && apiEndpoint.trim() !== '') {
+    if (downloadBaseUrl) {
       try {
-        const urlObject = new URL(originalUri);
-        // Construct the new URL using the custom endpoint as the host.
-        // Assumes the apiEndpoint is just the hostname, e.g., "my-proxy.com"
-        // and the protocol is https.
-        downloadUrl = `https://${apiEndpoint}${urlObject.pathname}`;
+        const originalUrlObject = new URL(originalUri);
+        // Anexe o caminho do URI original do Google
+        downloadUrl = `${downloadBaseUrl}${originalUrlObject.pathname}`;
         console.log(
-          `Using custom endpoint. Original URI: ${originalUri}, Constructed Download URL: ${downloadUrl}`,
+          `Usando endpoint personalizado. URI Original: ${originalUri}, URL de Download Construída: ${downloadUrl}`,
         );
       } catch (e) {
         console.error(
-          'Could not parse original video URI with custom endpoint, falling back to original URI.',
+          'Não foi possível analisar o URI do vídeo original, retornando ao URI original.',
           e,
         );
         downloadUrl = originalUri;
@@ -191,14 +215,14 @@ export const generateVideo = async (
       downloadUrl = originalUri;
     }
 
-    console.log('Fetching video from:', downloadUrl);
+    console.log('Buscando vídeo de:', downloadUrl);
     const res = await fetch(`${downloadUrl}&key=${apiKey}`);
 
     if (!res.ok) {
       const errorBody = await res.text();
-      console.error('Failed to fetch video. Response:', errorBody);
+      console.error('Falha ao buscar vídeo. Resposta:', errorBody);
       throw new Error(
-        `Failed to fetch video: ${res.status} ${res.statusText}. ${errorBody}`,
+        `Falha ao buscar vídeo: ${res.status} ${res.statusText}. ${errorBody}`,
       );
     }
 
@@ -207,7 +231,7 @@ export const generateVideo = async (
 
     return {objectUrl, blob: videoBlob, uri: downloadUrl, video: videoObject};
   } else {
-    console.error('Operation failed:', operation);
-    throw new Error('No videos generated.');
+    console.error('A operação falhou:', operation);
+    throw new Error('Nenhum vídeo gerado.');
   }
 };
